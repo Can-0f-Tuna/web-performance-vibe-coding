@@ -7,10 +7,10 @@
 ## 📦 Installation
 
 ```bash
-bun install web-performance-vibe-coding
+npx skills add Can-0f-Tuna/web-performance-vibe-coding
 ```
 
-Requires [Bun](https://bun.sh).
+Installs the skill for use with Claude, OpenCode, and 50+ AI agents.
 
 > **"There's no magic. Just tell the AI what you want it to do."**
 
@@ -285,10 +285,10 @@ This skill demonstrates the patterns it teaches:
 ## 📦 Installation
 
 ```bash
-bun install web-performance-vibe-coding
+npx skills add Can-0f-Tuna/web-performance-vibe-coding
 ```
 
-Requires [Bun](https://bun.sh).
+Installs the skill for use with Claude, OpenCode, and 50+ AI agents.
 
 ## 🚦 Quick Reference
 
