@@ -4,6 +4,25 @@
 [![Bun](https://img.shields.io/badge/Bun-3x%20Faster-orange)](https://bun.sh)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+## 📦 Installation
+
+```bash
+# Bun (recommended - 3x faster)
+bun install web-performance-vibe-coding
+
+# pnpm
+pnpm install web-performance-vibe-coding
+
+# npm
+npm install web-performance-vibe-coding
+
+# npx (no install required)
+npx web-performance-vibe-coding
+
+# Direct clone
+git clone https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
+```
+
 > **"There's no magic. Just tell the AI what you want it to do."**
 
 Build the fastest web applications you've ever created using Brotzky's "vibe coding" approach - directing AI through natural language prompts to implement extreme performance optimizations without writing every line of code manually.
