@@ -4,42 +4,34 @@
 [![Bun](https://img.shields.io/badge/Bun-3x%20Faster-orange)](https://bun.sh)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 📦 Installation (GitHub - Not on NPM Yet)
+## 📦 Installation (Bun Only - Maximum Speed)
 
-Since this skill is hosted on GitHub (not npm), use these methods:
+⚡ **This skill requires Bun. We don't support npm, pnpm, or yarn because performance matters.**
 
-### Method 1: Install from GitHub (Recommended)
+### Why Bun Only?
+- **3x faster package installs** than npm
+- **4x faster script execution** 
+- **Native TypeScript support** (no transpilation step)
+- **Built-in bundler** (smaller bundles than webpack/rollup)
+
+If you want to build the fastest apps, you need the fastest tools.
+
+### Install
 ```bash
-# Bun (recommended)
+# Install from npm registry (after published)
+bun install web-performance-vibe-coding
+
+# Or install from GitHub
 bun install github:Can-0f-Tuna/web-performance-vibe-coding
 
-# pnpm
-pnpm install github:Can-0f-Tuna/web-performance-vibe-coding
-
-# npm
-npm install github:Can-0f-Tuna/web-performance-vibe-coding
-
-# Yarn
-yarn add github:Can-0f-Tuna/web-performance-vibe-coding
+# Or clone with Bun's fast git clone
+bun x git-clone https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
 ```
 
-### Method 2: Clone for Skill Development
-```bash
-# Clone to your skills directory
-git clone https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
+### Not Using Bun?
+This skill is designed for extreme performance. If you're not using Bun, you're leaving speed on the table.
 
-# Move to Claude's skills folder
-cp -r web-performance-vibe-coding ~/.agents/skills/
-
-# Or use directly
-ls web-performance-vibe-coding/references/
-```
-
-### Method 3: Git Submodule (For Projects)
-```bash
-git submodule add https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
-git submodule update --init
-```
+Install Bun: https://bun.sh
 
 > **"There's no magic. Just tell the AI what you want it to do."**
 
@@ -311,28 +303,30 @@ This skill demonstrates the patterns it teaches:
 
 **The result:** Production-grade, exceptionally fast apps built in a weekend.
 
-## 📦 Installation Methods
+## 📦 Installation Methods (Bun Only)
 
-### Method 1: Direct Clone (Recommended for reference)
+**⚡ Bun Required. We don't support slow tools.**
+
+### Method 1: Install with Bun (Recommended)
 ```bash
-git clone https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
+bun install web-performance-vibe-coding
+```
+
+### Method 2: Install from GitHub
+```bash
+bun install github:Can-0f-Tuna/web-performance-vibe-coding
+```
+
+### Method 3: Clone with Bun
+```bash
+# Bun's git is faster
+bun x git-clone https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
 cd web-performance-vibe-coding
-ls references/
 ```
 
-### Method 2: Claude Skill Directory
+### Method 4: Move to Claude Skills Directory
 ```bash
-# Move to Claude's skills directory
 cp -r web-performance-vibe-coding ~/.agents/skills/
-
-# Or create symlink
-ln -s $(pwd)/web-performance-vibe-coding ~/.agents/skills/
-```
-
-### Method 3: Submodule (For projects)
-```bash
-git submodule add https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
-git submodule update --init
 ```
 
 ## 🚦 Quick Reference
