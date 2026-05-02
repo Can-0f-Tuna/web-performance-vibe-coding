@@ -4,23 +4,41 @@
 [![Bun](https://img.shields.io/badge/Bun-3x%20Faster-orange)](https://bun.sh)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 📦 Installation
+## 📦 Installation (GitHub - Not on NPM Yet)
 
+Since this skill is hosted on GitHub (not npm), use these methods:
+
+### Method 1: Install from GitHub (Recommended)
 ```bash
-# Bun (recommended - 3x faster)
-bun install web-performance-vibe-coding
+# Bun (recommended)
+bun install github:Can-0f-Tuna/web-performance-vibe-coding
 
 # pnpm
-pnpm install web-performance-vibe-coding
+pnpm install github:Can-0f-Tuna/web-performance-vibe-coding
 
 # npm
-npm install web-performance-vibe-coding
+npm install github:Can-0f-Tuna/web-performance-vibe-coding
 
-# npx (no install required)
-npx web-performance-vibe-coding
+# Yarn
+yarn add github:Can-0f-Tuna/web-performance-vibe-coding
+```
 
-# Direct clone
+### Method 2: Clone for Skill Development
+```bash
+# Clone to your skills directory
 git clone https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
+
+# Move to Claude's skills folder
+cp -r web-performance-vibe-coding ~/.agents/skills/
+
+# Or use directly
+ls web-performance-vibe-coding/references/
+```
+
+### Method 3: Git Submodule (For Projects)
+```bash
+git submodule add https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
+git submodule update --init
 ```
 
 > **"There's no magic. Just tell the AI what you want it to do."**
