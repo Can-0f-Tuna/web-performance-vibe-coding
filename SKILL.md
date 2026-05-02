@@ -34,6 +34,8 @@ Activate this skill when:
 - Image loading is slow or causing layout shifts
 - Database queries or API responses are bottlenecking
 
+→ [Need a specific fix? Start with the Diagnostic Router](./references/diagnostic-router.md)
+
 ## Core Philosophy
 
 **"Measure first. Optimize second. There's no magic — just tell the AI what you want it to do."**
@@ -742,6 +744,33 @@ window.addEventListener('load', () => {
 
 ## Vibe Coding Workflow
 
+### The AI Is Your Junior Performance Engineer
+
+The AI writes the code. You verify the results. Never deploy AI-generated optimizations without measuring their impact. Use AI suggestions as starting points, then confirm with profiling data. If the numbers don't back it up, revert and iterate.
+
+### The Vibe Coding Loop
+
+```
+┌─────────────────────────────────────────┐
+│  1. Issue high-level instruction        │
+│     "Make this component render         │
+│      instantly"                         │
+├─────────────────────────────────────────┤
+│  2. AI generates code                   │
+│     • Implements optimization           │
+│     • Suggests additional improvements  │
+├─────────────────────────────────────────┤
+│  3. Skim terminal diff                  │
+│     • Check architecture                │
+│     • Review AI implementation for      │
+│       correctness                       │
+├─────────────────────────────────────────┤
+│  4. Test and iterate                    │
+│     • Measure performance               │
+│     • Issue next instruction            │
+└─────────────────────────────────────────┘
+```
+
 ### Terminal-Based Development
 
 1. **Minimal Setup:** Run AI directly in macOS Terminal (or equivalent)
@@ -771,6 +800,134 @@ window.addEventListener('load', () => {
 - "Replace moment.js with date-fns tree-shakeable imports"
 - "Add image srcset with AVIF/WebP/JPEG format cascade"
 
+### When AI Gets It Wrong
+
+Common AI-generated performance bugs and how to spot them:
+
+#### 1. `React.memo` with Incorrect Comparators
+
+The AI writes a comparator that ignores props, so the component never re-renders — even when it should.
+
+```jsx
+// BUG: ignores all props except 'price'
+const StockItem = memo(StockItemComponent, (prev, next) => {
+  return prev.stock.price === next.stock.price;
+});
+// 'name' or 'ticker' changes? Still won't re-render.
+
+// FIX: either omit the comparator (shallow compare is usually sufficient)
+const StockItem = memo(StockItemComponent);
+// or explicitly compare all meaningful props
+```
+
+#### 2. `useEffect` Without Cleanup
+
+The AI sets up subscriptions or intervals but forgets the cleanup function — memory leak.
+
+```jsx
+// BUG: no cleanup — interval piles up on every remount
+useEffect(() => {
+  const id = setInterval(() => fetchPrices(), 5000);
+  // Missing: return () => clearInterval(id);
+}, []);
+
+// FIX: always return a cleanup function
+useEffect(() => {
+  const id = setInterval(() => fetchPrices(), 5000);
+  return () => clearInterval(id);
+}, []);
+```
+
+#### 3. Custom Hooks with Stale Closures
+
+The AI writes a hook that captures a stale value because it forgot to add dependencies.
+
+```jsx
+// BUG: 'filters' captured once, never updated
+function useFilteredData(filters) {
+  useEffect(() => {
+    fetchData(filters).then(setData);
+  }, []); // Missing: 'filters' in dependency array
+  return data;
+}
+
+// FIX: include all dependencies
+function useFilteredData(filters) {
+  useEffect(() => {
+    let cancelled = false;
+    fetchData(filters).then(result => {
+      if (!cancelled) setData(result);
+    });
+    return () => { cancelled = true; };
+  }, [filters]);
+  return data;
+}
+```
+
+#### 4. Debounce Called on Every Render
+
+The AI creates a new debounced function on every render — debouncing is defeated.
+
+```jsx
+// BUG: new debounced function created every render
+function SearchInput() {
+  const [query, setQuery] = useState('');
+  const debouncedSearch = debounce(fetchResults, 300);
+  // Every keystroke still fires an API call after 300ms
+}
+
+// FIX: stable reference with useMemo or useCallback
+function SearchInput() {
+  const [query, setQuery] = useState('');
+  const debouncedSearch = useMemo(
+    () => debounce(fetchResults, 300),
+    []
+  );
+}
+```
+
+**Rule of thumb:** If the AI adds `useEffect`, `useMemo`, `useCallback`, or `memo`, check that:
+- Dependency arrays are complete (no lint warnings suppressed)
+- Cleanup functions exist for every subscription, interval, and listener
+- Comparators are not over-filtering props
+- Debounce/throttle functions are not recreated on every render
+
+### Example Terminal Session
+
+```
+$ claude
+
+> Create a new React financial dashboard app with minimal dependencies. Use Vite. Target 114 KB bundle.
+[AI generates project structure, package.json]
+
+> Implement lazy code splitting for all routes. Add modulepreload hints. Inline critical CSS. Replace moment.js with date-fns.
+[AI generates router config, dynamic imports, CSS inlining]
+
+> Show me the bundle analysis
+[AI runs build, shows analyzer output]
+
+> Add hover-based prefetching for all stock tickers. Preload 7 essential APIs on page mount.
+[AI generates prefetch hooks, intent detection]
+
+> Implement multi-layered caching: SWR 30s, localStorage 5min, HTTP headers 1 hour. Add cache hydration on app load.
+[AI generates caching layer components]
+
+> Enable true token streaming for AI chat. Add anti-buffering headers. Implement parallel tool calls.
+[AI generates streaming components]
+
+> Lazy load all charts with reserved height. Memoize list items. Prevent all layout shifts.
+[AI generates optimized chart components]
+
+> Build shared WebSocket across app. Smart reconnect on visibility change.
+[AI generates WebSocket context]
+
+> Add offline-first PWA shell. Precache app shell. NetworkFirst navigation. 30-day font caching.
+[AI generates service worker config]
+
+> Show me all performance metrics. Verify bundle size, load times, cache hit rates.
+[AI generates performance report]
+```
+
 ---
 
 ## Tooling Recommendation: Use Bun
@@ -794,23 +951,108 @@ bunx <package>       # Instead of: npx <package>
 
 ## Complete Implementation Example
 
-Build the fastest financial app in a weekend:
+Build the fastest app in a weekend. Each step includes the exact prompt to give the AI and the verification command.
 
-```
-1. Initialize React app with Bun (bun create vite)
-2. Implement bundle optimization (114 KB target)
-3. Add intelligent prefetching for all navigation
-4. Configure multi-layered caching (SWR + localStorage + Redis + KV)
-5. Enable true streaming for AI features
-6. Optimize DOM with lazy charts, content-visibility, and memoization
-7. Build shared WebSocket for real-time data
-8. Add service worker with offline-first shell
-9. Optimize images with Sharp pipeline (AVIF, WebP, JPEG, srcset)
-10. Add database indexes and Redis caching
-11. Set up Lighthouse CI with performance budgets
+### Day 1: Foundation (8 hours)
+
+#### Hour 1-2: Project Setup
+
+**Prompt:**
+> Create a new React app with Bun. Use Vite + React Router + TanStack Query. Minimal dependencies. Exclude moment.js, full lodash, heavy UI libraries. Target bundle under 150 KB.
+
+**Verify:**
+```bash
+bun run build
+bunx vite-bundle-visualizer
 ```
 
-→ [Complete weekend build guide](./references/complete-implementation.md)
+#### Hour 3-4: Bundle Optimization
+
+**Prompt:**
+> Implement aggressive bundle optimization. Code split all routes. Modulepreload hints. Inline critical CSS. Replace heavy libraries with lightweight alternatives (moment → date-fns, lodash → native + tree-shakeable imports). Target under 150 KB (114 KB aspirational ceiling). Add build minification and tree-shaking.
+
+**Verify:**
+```bash
+bun run build
+# Check dist/assets/*.js sizes — total should be under 150 KB
+```
+
+#### Hour 5-6: Intelligent Prefetching
+
+**Prompt:**
+> Implement intent-based prefetching: hover prefetching for tickers and navigation, preload 7 essential APIs on page mount (user, portfolio, watchlist, markets, notifications, settings), login intent detection that preloads dashboard data, touch-based prefetching for mobile, connection-aware (skip on 2G/data saver).
+
+**Verify:** Hover over ticker → Network tab shows prefetch request. Login form focus → Dashboard APIs preload.
+
+#### Hour 7-8: Multi-Layered Caching
+
+**Prompt:**
+> Build multi-layered caching: SWR with appropriate stale times (30s price, 1min quote, 5min chart, 1hr financials, 1day profile), localStorage hydration for instant initial load, HTTP cache headers (CDN-Cache-Control with stale-while-revalidate), shared application cache for cross-component data, cache invalidation on WebSocket updates. Target 5-minute data freshness.
+
+**Verify:** Refresh page → Data appears instantly from localStorage. Multiple components → Single API request shared.
+
+### Day 2: Polish (8 hours)
+
+#### Hour 1-2: True Streaming
+
+**Prompt:**
+> Implement real token streaming (not chunked simulation), anti-buffering headers (X-Accel-Buffering: no, no-cache), parallel tool calls on backend, client-side API batching over single endpoint, progress indicators for streaming operations.
+
+**Verify:** Send AI message → Tokens appear in real-time. Network tab → No buffering.
+
+#### Hour 3-4: DOM Discipline
+
+**Prompt:**
+> Optimize DOM: lazy load all charts with reserved height (prevent CLS), tab-level lazy loading, memoize expensive list items, show cached data instantly on load, keep DOM structure flat and lightweight, instant repaints on cache hits. Target CLS under 0.1, 60fps scrolling.
+
+**Verify:**
+```bash
+lighthouse https://example.com --output json | jq .audits['cumulative-layout-shift'].score
+```
+DevTools Performance → 60fps during scroll.
+
+#### Hour 5-6: Shared WebSocket
+
+**Prompt:**
+> Build shared WebSocket: single instance across entire app, subscription management system, smart reconnect with exponential backoff, gate reconnect on page visibility (pause when hidden), prefetch all subscribed data on connection, handle live price updates efficiently.
+
+**Verify:** Open app → Single WS connection. Background tab → Connection pauses. Return to tab → Reconnects. Price updates → Instant UI.
+
+#### Hour 7-8: Service Worker
+
+**Prompt:**
+> Implement offline-first PWA: precache app shell (index.html, main.js, main.css, offline.html), NetworkFirst navigation with 3-second timeout fallback, long-term font caching (30 days), idle registration, API response caching with stale-while-revalidate.
+
+**Verify:** DevTools → Application → Service Workers → SW active. Offline mode → App shell loads instantly.
+
+### Integration Testing (Hour 9-10)
+
+**Prompt:**
+> Run comprehensive performance test: measure bundle size (target 114 KB), test FCP/LCP/TTI, verify cache hit rates, check WebSocket stability, test offline, measure CLS and animation frame rate.
+
+**Expected Results:**
+```
+Bundle Size: 114 KB     ✓
+LCP: under 2.5s         ✓
+CLS: under 0.1          ✓
+TTI: under 3.8s         ✓
+Cache Hit Rate: 85%+    ✓
+WS Reconnect: under 500ms ✓
+```
+
+**Test scenarios:**
+
+1. **Cold start:** Shell appears instantly, cached data visible immediately, fresh data streams in
+2. **Navigation:** Hover ticker → click → instant load, switch tabs → no layout shift, scroll screener → 60fps smooth
+3. **AI interaction:** Send message → tokens stream real-time with typewriter effect, background requests batch automatically
+4. **Offline:** Disable network → app shell works, cached data visible, graceful degradation
+5. **Real-time:** Price updates → instant UI refresh, WebSocket reconnects after interruption, no stale data
+
+**Deployment:**
+```bash
+bun run build && bun run preview
+bunx lighthouse-ci
+```
 
 ---
 
@@ -831,6 +1073,8 @@ Build the fastest financial app in a weekend:
 
 ## Navigation
 
+- **[🔍 Diagnostic Router](./references/diagnostic-router.md)** — Map symptoms to the right reference file
+
 ### Strategy Implementation
 - **[📦 Bundle Optimization](./references/bundle-optimization.md)** — Dependency replacement, code splitting, tree shaking, critical CSS inlining
 - **[⚡ Intelligent Prefetching](./references/intelligent-prefetching.md)** — Intent detection, hover prefetching, parallel loading, preconnect
@@ -844,9 +1088,6 @@ Build the fastest financial app in a weekend:
 - **[⚡ Perceived Performance](./references/perceived-performance.md)** — 80ms threshold, optimistic UI, skeleton screens, animation timing
 - **[🗄️ Database & Backend](./references/database-backend-performance.md)** — N+1 fixes, indexes, Redis cache-aside, pagination, HTTP caching
 
-### Complete Guides
-- **[🏗️ Complete Implementation](./references/complete-implementation.md)** — Weekend build walkthrough, step-by-step integration
-- **[🧠 Vibe Coding Techniques](./references/vibe-coding-workflow.md)** — Terminal workflow, effective prompting, AI collaboration
 
 ---
 

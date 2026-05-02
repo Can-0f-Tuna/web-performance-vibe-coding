@@ -235,7 +235,7 @@ export function hydrateReactQueryCache() {
 }
 
 // App.jsx
-import { HydrationBoundary, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Hydrate, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -247,9 +247,9 @@ function App() {
   
   return (
     <QueryClientProvider client={queryClient}>
-      <HydrationBoundary state={dehydratedState}>
+      <Hydrate state={dehydratedState}>
         <Router />
-      </HydrationBoundary>
+      </Hydrate>
     </QueryClientProvider>
   );
 }

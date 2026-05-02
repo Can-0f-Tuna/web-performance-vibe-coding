@@ -16,10 +16,9 @@ Comprehensive guide to achieving sub-150 KB bundles and instant cold starts.
 
 **Audit current dependencies:**
 ```bash
-# For Vite projects — add rollup-plugin-visualizer to vite.config.js, then build
+# For Vite projects — use rollup-plugin-visualizer (underlying tool)
 bun add -D rollup-plugin-visualizer
-# Add to vite.config.js: import { visualizer } from 'rollup-plugin-visualizer'
-# plugins: [visualizer({ open: true })], then: bun run build
+bunx vite-bundle-visualizer
 
 # For webpack projects
 bun install -g webpack-bundle-analyzer

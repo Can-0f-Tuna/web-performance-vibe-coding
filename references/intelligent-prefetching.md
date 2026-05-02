@@ -131,11 +131,8 @@ Implement hover prefetching for tickers, chat, navigation elements.
 ```javascript
 // HoverPrefetchLink.jsx
 import { Link } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 
 function HoverPrefetchLink({ to, apiUrl, children, ...props }) {
-  const queryClient = useQueryClient();
-
   const handleMouseEnter = () => {
     // Prefetch route component
     prefetchRoute(to);
