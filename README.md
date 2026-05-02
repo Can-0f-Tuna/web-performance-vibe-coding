@@ -4,34 +4,13 @@
 [![Bun](https://img.shields.io/badge/Bun-3x%20Faster-orange)](https://bun.sh)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 📦 Installation (Bun Only - Maximum Speed)
+## 📦 Installation
 
-⚡ **This skill requires Bun. We don't support npm, pnpm, or yarn because performance matters.**
-
-### Why Bun Only?
-- **3x faster package installs** than npm
-- **4x faster script execution** 
-- **Native TypeScript support** (no transpilation step)
-- **Built-in bundler** (smaller bundles than webpack/rollup)
-
-If you want to build the fastest apps, you need the fastest tools.
-
-### Install
 ```bash
-# Install from npm registry (after published)
 bun install web-performance-vibe-coding
-
-# Or install from GitHub
-bun install github:Can-0f-Tuna/web-performance-vibe-coding
-
-# Or clone with Bun's fast git clone
-bun x git-clone https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
 ```
 
-### Not Using Bun?
-This skill is designed for extreme performance. If you're not using Bun, you're leaving speed on the table.
-
-Install Bun: https://bun.sh
+Requires [Bun](https://bun.sh).
 
 > **"There's no magic. Just tell the AI what you want it to do."**
 
@@ -303,31 +282,13 @@ This skill demonstrates the patterns it teaches:
 
 **The result:** Production-grade, exceptionally fast apps built in a weekend.
 
-## 📦 Installation Methods (Bun Only)
+## 📦 Installation
 
-**⚡ Bun Required. We don't support slow tools.**
-
-### Method 1: Install with Bun (Recommended)
 ```bash
 bun install web-performance-vibe-coding
 ```
 
-### Method 2: Install from GitHub
-```bash
-bun install github:Can-0f-Tuna/web-performance-vibe-coding
-```
-
-### Method 3: Clone with Bun
-```bash
-# Bun's git is faster
-bun x git-clone https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git
-cd web-performance-vibe-coding
-```
-
-### Method 4: Move to Claude Skills Directory
-```bash
-cp -r web-performance-vibe-coding ~/.agents/skills/
-```
+Requires [Bun](https://bun.sh).
 
 ## 🚦 Quick Reference
 
