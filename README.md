@@ -7,7 +7,7 @@
 ## 📦 Installation
 
 ```bash
-npx skills add Can-0f-Tuna/web-performance-vibe-coding
+bunx skills add Can-0f-Tuna/web-performance-vibe-coding
 ```
 
 Installs the skill for use with Claude, OpenCode, and 50+ AI agents.
@@ -285,7 +285,7 @@ This skill demonstrates the patterns it teaches:
 ## 📦 Installation
 
 ```bash
-npx skills add Can-0f-Tuna/web-performance-vibe-coding
+bunx skills add Can-0f-Tuna/web-performance-vibe-coding
 ```
 
 Installs the skill for use with Claude, OpenCode, and 50+ AI agents.
