@@ -8,6 +8,8 @@ The terminal-based, AI-directed development approach that delivered exceptional 
 
 Combine 15 years of engineering experience with AI leverage to achieve meticulous optimization without manual implementation of every detail.
 
+**The AI is your junior performance engineer.** It writes the code. You verify the results. Never deploy AI-generated optimizations without measuring their impact. Use AI suggestions as starting points, then confirm with profiling data. If the numbers don't back it up, revert and iterate.
+
 ## Terminal-Based Development
 
 ### Minimal Setup
@@ -39,7 +41,8 @@ $ claude
 ├─────────────────────────────────────────┤
 │  3. Skim terminal diff                  │
 │     • Check architecture                │
-│     • Trust AI on implementation        │
+│     • Review AI implementation for      │
+│       correctness                       │
 ├─────────────────────────────────────────┤
 │  4. Test and iterate                    │
 │     • Measure performance               │
@@ -154,6 +157,8 @@ $ claude
 
 ## Skimming Diff Output
 
+Review diffs with skepticism. AI sometimes introduces bugs: stale closures, missing cleanup functions, incorrect memo dependency arrays. Trust the architecture check, then verify behavior with measurements.
+
 ### What to Check
 
 **Architecture Decisions:**
@@ -162,12 +167,12 @@ $ claude
 - ✅ WebSocket connection sharing
 - ✅ Service worker scope correct
 
-**Trust AI On:**
-- Implementation details
-- CSS values and spacing
-- Specific function implementations
-- Test cases
-- Error handling details
+**Verify with Measurements (don't blindly trust):**
+- Implementation details — confirm behavior with profiling
+- Specific function implementations — test for stale closures and missing cleanups
+- Memoization — check dependency arrays are complete and correct
+- Error handling — ensure edge cases are actually covered
+- Test cases — review for false positives and missing scenarios
 
 ### Example Diff Review
 
@@ -209,9 +214,9 @@ I can optimize this API call. Additionally, I noticed:
 
 Should I implement all three improvements?
 
-> Yes, implement all three
+> Yes, implement all three. After each one, show me before/after metrics.
 
-[AI generates optimized implementation with all suggestions]
+[AI generates optimized implementation with all suggestions and measurement hooks]
 ```
 
 ### Iterative Refinement
@@ -351,10 +356,105 @@ Should I add font-display: swap?
 - Hour 9: Performance testing and iteration
 - Hour 10: Documentation and deployment
 
+## When AI Gets It Wrong
+
+Common AI-generated performance bugs and how to spot them:
+
+### 1. `React.memo` with Incorrect Comparators
+
+The AI writes a comparator that ignores props, so the component never re-renders — even when it should.
+
+```jsx
+// BUG: ignores all props except 'price'
+const StockItem = memo(StockItemComponent, (prev, next) => {
+  return prev.stock.price === next.stock.price;
+});
+// 'name' or 'ticker' changes? Still won't re-render.
+
+// FIX: either omit the comparator (shallow compare is usually sufficient)
+const StockItem = memo(StockItemComponent);
+// or explicitly compare all meaningful props
+// or skip memo altogether if props change frequently
+```
+
+### 2. `useEffect` Without Cleanup
+
+The AI sets up subscriptions or intervals but forgets the cleanup function — memory leak.
+
+```jsx
+// BUG: no cleanup — interval piles up on every remount
+useEffect(() => {
+  const id = setInterval(() => fetchPrices(), 5000);
+  // Missing: return () => clearInterval(id);
+}, []);
+
+// FIX: always return a cleanup function
+useEffect(() => {
+  const id = setInterval(() => fetchPrices(), 5000);
+  return () => clearInterval(id);
+}, []);
+```
+
+### 3. Custom Hooks with Stale Closures
+
+The AI writes a hook that captures a stale value because it forgot to add dependencies.
+
+```jsx
+// BUG: 'filters' captured once, never updated
+function useFilteredData(filters) {
+  useEffect(() => {
+    fetchData(filters).then(setData);
+  }, []); // Missing: 'filters' in dependency array
+  return data;
+}
+
+// FIX: include all dependencies
+function useFilteredData(filters) {
+  useEffect(() => {
+    let cancelled = false;
+    fetchData(filters).then(result => {
+      if (!cancelled) setData(result);
+    });
+    return () => { cancelled = true; };
+  }, [filters]);
+  return data;
+}
+```
+
+### 4. Debounce Called on Every Render
+
+The AI creates a new debounced function on every render — debouncing is defeated.
+
+```jsx
+// BUG: new debounced function created every render
+function SearchInput() {
+  const [query, setQuery] = useState('');
+  const debouncedSearch = debounce(fetchResults, 300);
+  // Every keystroke still fires an API call after 300ms
+  // because the debounce instance is recreated each render
+}
+
+// FIX: stable reference with useMemo or useCallback
+function SearchInput() {
+  const [query, setQuery] = useState('');
+  const debouncedSearch = useMemo(
+    () => debounce(fetchResults, 300),
+    []
+  );
+  // Or use useRef to hold the debounced function
+}
+```
+
+**Rule of thumb:** If the AI adds `useEffect`, `useMemo`, `useCallback`, or `memo`, check that:
+- Dependency arrays are complete (no lint warnings suppressed)
+- Cleanup functions exist for every subscription, interval, and listener
+- Comparators are not over-filtering props
+- Debounce/throttle functions are not recreated on every render
+
 ## Key Reminders
 
-1. **Trust the AI:** It implements micro-optimizations while you focus on architecture
-2. **Skim don't read:** Check diffs for correctness, trust implementation details
+1. **Measure the AI's output:** Use AI suggestions as starting points, then verify with measurements. Never deploy without profiling.
+2. **Skim don't read:** Check diffs for architecture correctness and common AI bugs (stale closures, missing cleanups, incorrect memo deps)
 3. **Iterate quickly:** Issue prompts, review, refine, repeat
 4. **Measure constantly:** Track bundle size, load times, cache hits
 5. **Focus on outcomes:** "Make it fast" not "Implement X pattern"

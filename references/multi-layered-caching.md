@@ -21,12 +21,17 @@ Achieve fresh data without latency through intelligent, tiered caching.
 │  • 30 seconds to 1 day TTL              │
 │  • Configurable per endpoint            │
 ├─────────────────────────────────────────┤
-│  Layer 4: KV Store (Edge)               │
+│  Layer 4: Redis Cache-Aside             │
+│  • Server-side in-memory cache          │
+│  • 1-hour TTL with pattern invalidation│
+│  • Stale-while-revalidate refreshes     │
+├─────────────────────────────────────────┤
+│  Layer 5: KV Store (Edge)               │
 │  • Gemini context cache                 │
 │  • 30-minute cache                      │
 │  • AI-generated summaries               │
 ├─────────────────────────────────────────┤
-│  Layer 5: Shared Application Cache      │
+│  Layer 6: Shared Application Cache      │
 │  • Cross-component data sharing         │
 │  • Chart data, AI summaries             │
 │  • Prevents duplicate requests          │
@@ -230,7 +235,7 @@ export function hydrateReactQueryCache() {
 }
 
 // App.jsx
-import { Hydrate, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { HydrationBoundary, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -242,9 +247,9 @@ function App() {
   
   return (
     <QueryClientProvider client={queryClient}>
-      <Hydrate state={dehydratedState}>
+      <HydrationBoundary state={dehydratedState}>
         <Router />
-      </Hydrate>
+      </HydrationBoundary>
     </QueryClientProvider>
   );
 }
@@ -326,7 +331,206 @@ export async function GET_WITH_ETAG(request, { params }) {
 }
 ```
 
-## Layer 4: Gemini Context Cache (Edge KV)
+### Cache-Control Headers by Asset Type
+
+Use different caching strategies based on asset type. Assets with content hashes in their filenames can be cached aggressively; unhashed assets need shorter TTLs with validation.
+
+| Asset Type | Cache-Control Header |
+|---|---|
+| Static assets with content hash (e.g., `app.abc123.js`) | `public, max-age=31536000, immutable` |
+| Static assets without hash (e.g., `logo.png`) | `public, max-age=86400, stale-while-revalidate=604800` |
+| API responses | `public, max-age=300` (5 minutes) |
+| HTML documents | `no-cache, must-revalidate` |
+
+**What each directive does:**
+
+- **`immutable`** — During the `max-age` window, the browser will not even send a conditional request (no `If-None-Match` / `If-Modified-Since`). This massively reduces network requests for versioned assets that will never change.
+- **`stale-while-revalidate=604800`** — The browser serves stale cached content for up to 7 days while async-fetching the fresh version in the background. On the next visit, the fresh version is already cached.
+- **`max-age`** — Number of seconds the response is considered fresh. After expiration, the browser sends a conditional request (`304 Not Modified` if unchanged).
+- **`no-cache`** — The browser must revalidate with the server before using the cached version. Every request still uses the cache (via `304`) but never shows a stale page without checking.
+- **`must-revalidate`** — Forces stale responses to be revalidated before use. Critical for HTML to ensure visitors never see outdated pages from stale caches.
+- **`public`** — The response can be cached by shared caches (CDNs, proxies) in addition to the browser's private cache.
+
+**Brotli Compression Note:** Enable Brotli (`br`) compression on your server/CDN for all text-based responses (HTML, CSS, JS, JSON, SVG). Brotli produces files 15–20% smaller than gzip for text content, reducing transfer size and improving Time to First Byte. Most CDNs (Cloudflare, Vercel, Netlify) and modern servers (Nginx, Caddy) support Brotli out of the box.
+
+```nginx
+# nginx: enable brotli compression
+brotli on;
+brotli_comp_level 6;
+brotli_types text/plain text/css application/javascript application/json image/svg+xml;
+```
+
+## Layer 4: Redis Cache-Aside Pattern
+
+Redis sits between your application server and database, providing sub-millisecond in-memory access. The cache-aside pattern (lazy-loading) checks Redis first, falls back to the database on a miss, and populates the cache for subsequent requests.
+
+### Core Cache-Aside Implementation
+
+```typescript
+// lib/cache.ts
+import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_URL!,
+  token: process.env.UPSTASH_REDIS_TOKEN!,
+});
+
+const DEFAULT_TTL = 3600; // 1 hour
+const STALE_TTL = 300;    // 5-minute stale buffer
+
+export async function getCachedOrFetch<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttl: number = DEFAULT_TTL
+): Promise<T> {
+  // 1. Check Redis cache first
+  const cached = await redis.get(key);
+  if (cached) return cached as T;
+
+  // 2. Cache miss — fetch from source
+  const data = await fetcher();
+
+  // 3. Store in Redis with TTL
+  await redis.setex(key, ttl, data);
+
+  return data;
+}
+```
+
+### User Profile Example
+
+```typescript
+// app/api/user/[userId]/route.ts
+import { getCachedOrFetch } from '@/lib/cache';
+
+async function getUserProfile(userId: string) {
+  // 1. Check Redis cache first
+  const cached = await redis.get(`user:${userId}`);
+  if (cached) return JSON.parse(cached);
+
+  // 2. Query database
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: { profile: true, settings: true },
+  });
+
+  // 3. Store in Redis with TTL (1 hour)
+  await redis.setex(
+    `user:${userId}`,
+    3600,
+    JSON.stringify(user)
+  );
+
+  return user;
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: { userId: string } }
+) {
+  const user = await getUserProfile(params.userId);
+
+  if (!user) {
+    return new Response(null, { status: 404 });
+  }
+
+  return Response.json(user, {
+    headers: {
+      'Cache-Control': 'private, max-age=300, stale-while-revalidate=3600',
+    },
+  });
+}
+```
+
+### Stale-While-Revalidate with Redis
+
+Replicate CDN-style SWR semantics at the cache layer. Serve stale data instantly, then refresh asynchronously — the user never waits for a cache miss.
+
+```typescript
+// lib/cache-swr.ts
+export async function getCachedOrFetchSWR<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttl: number = DEFAULT_TTL
+): Promise<T> {
+  const staleKey = `${key}:stale`;
+
+  // 1. Check fresh cache
+  const fresh = await redis.get(key);
+  if (fresh) {
+    // Trigger async refresh if near expiry (within STALE_TTL)
+    const pttl = await redis.pttl(key); // TTL in milliseconds
+    if (pttl !== -1 && pttl < STALE_TTL * 1000) {
+      // Fire-and-forget: refresh in background
+      (async () => {
+        try {
+          const newData = await fetcher();
+          await redis.setex(key, ttl, JSON.stringify(newData));
+        } catch (e) {
+          console.error('Background refresh failed:', e);
+        }
+      })();
+    }
+    return fresh as T;
+  }
+
+  // 2. Check stale cache
+  const stale = await redis.get(staleKey);
+  if (stale) {
+    // Background refresh
+    (async () => {
+      try {
+        const newData = await fetcher();
+        await redis.setex(key, ttl, JSON.stringify(newData));
+        await redis.del(staleKey);
+      } catch (e) {
+        console.error('Background refresh failed:', e);
+      }
+    })();
+    return stale as T;
+  }
+
+  // 3. Full miss — fetch and cache
+  try {
+    const data = await fetcher();
+    await redis.setex(key, ttl, JSON.stringify(data));
+    return data;
+  } catch (e) {
+    // Serve stale if fetch fails and stale exists
+    if (stale) return stale as T;
+    throw e;
+  }
+}
+```
+
+### Next.js API Route with Redis + SWR
+
+```typescript
+// app/api/stocks/[ticker]/route.ts
+import { getCachedOrFetchSWR } from '@/lib/cache-swr';
+
+export async function GET(
+  request: Request,
+  { params }: { params: { ticker: string } }
+) {
+  const { ticker } = params;
+  const cacheKey = `stock:${ticker.toUpperCase()}`;
+
+  const data = await getCachedOrFetchSWR(
+    cacheKey,
+    () => fetchStockData(ticker),
+    60 // 1 minute TTL for real-time stock data
+  );
+
+  return Response.json(data, {
+    headers: {
+      'Cache-Control': 'public, max-age=30, stale-while-revalidate=300',
+    },
+  });
+}
+```
+
+## Layer 5: Gemini Context Cache (Edge KV)
 
 ### KV Store for AI Features
 
@@ -383,13 +587,13 @@ export async function getCachedGeminiResponse(prompt, context) {
 }
 ```
 
-## Layer 5: Shared Application Cache
+## Layer 6: Shared Application Cache
 
 ### Cross-Component Data Sharing
 
 ```javascript
 // sharedCache.js
-import { createContext, useContext, useCallback } from 'react';
+import { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
 
 const SharedCacheContext = createContext(null);
 
@@ -447,23 +651,29 @@ export function useSharedCache(key, fetcher, ttl) {
   const { get, set, subscribe } = useContext(SharedCacheContext);
   const [data, setData] = useState(() => get(key));
   const [isLoading, setIsLoading] = useState(!data);
-  
+  const keyRef = useRef(key);
+  keyRef.current = key;
+
   useEffect(() => {
-    // Subscribe to cache updates
-    const unsubscribe = subscribe(key, setData);
-    
+    const currentKey = key;
+    const unsubscribe = subscribe(currentKey, setData);
+
     // Fetch if not in cache
-    if (!data) {
+    if (!get(currentKey)) {
       fetcher().then(fetched => {
-        set(key, fetched, ttl);
+        // Guard against stale fetch responses when key changed mid-request
+        if (currentKey !== keyRef.current) return;
+        set(currentKey, fetched, ttl);
         setData(fetched);
         setIsLoading(false);
       });
+    } else {
+      setIsLoading(false);
     }
-    
+
     return unsubscribe;
   }, [key]);
-  
+
   return { data, isLoading };
 }
 
@@ -571,12 +781,66 @@ socket.on('price_update', ({ ticker }) => {
 });
 ```
 
+### Redis Cache Invalidation
+
+Invalidate Redis keys on write (create, update, delete) to prevent stale reads. Use `SCAN` instead of `KEYS` in production to avoid blocking the Redis server.
+
+```typescript
+// Pattern-based key scanning for safe production invalidation
+async function invalidateRedisKeys(pattern: string) {
+  let cursor = 0;
+  const keys: string[] = [];
+  do {
+    const [nextCursor, found] = await redis.scan(cursor, {
+      match: pattern,
+      count: 100,
+    });
+    cursor = nextCursor;
+    keys.push(...found);
+  } while (cursor !== 0);
+
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
+  console.log(`Invalidated ${keys.length} keys matching "${pattern}"`);
+}
+
+// Write-through: invalidate and warm on mutation
+async function updateUserProfile(userId: string, data: any) {
+  await db.user.update({ where: { id: userId }, data });
+
+  // Invalidate then warm (cache the fresh data immediately)
+  await redis.del(`user:${userId}`);
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: { profile: true },
+  });
+  await redis.setex(`user:${userId}`, 3600, JSON.stringify(user));
+
+  return user;
+}
+
+// Cascade invalidation for related entities
+async function deletePortfolio(portfolioId: string) {
+  await db.portfolio.delete({ where: { id: portfolioId } });
+
+  await redis.del(`portfolio:${portfolioId}`);
+  await invalidateRedisKeys(`chart:${portfolioId}:*`);
+  await invalidateRedisKeys(`quote:${portfolioId}:*`);
+  await invalidateRedisKeys(`ai_summary:${portfolioId}:*`);
+}
+```
+
 ## Checklist
 
 - [ ] Configure SWR/React Query with appropriate stale times
 - [ ] Implement localStorage hydration for instant data
 - [ ] Set proper HTTP cache headers (30s to 1 day TTL)
+- [ ] Enable Brotli compression for text-based assets
 - [ ] Add ETag/Last-Modified support for conditional requests
+- [ ] Set up Redis cache-aside with appropriate TTLs per entity
+- [ ] Implement Redis stale-while-revalidate for background refreshes
+- [ ] Configure Redis pattern-based invalidation on writes
 - [ ] Implement Gemini context cache for AI features
 - [ ] Create shared application cache for cross-component data
 - [ ] Set up cache invalidation rules and WebSocket updates
@@ -589,6 +853,7 @@ socket.on('price_update', ({ ticker }) => {
 - **SWR/React Query cache hit rate:** 90%+
 - **localStorage hydration speed:** Under 50ms
 - **HTTP cache hit rate:** 80%+
+- **Redis cache hit rate:** 95%+ (sub-millisecond responses)
 - **Average data freshness:** 5 minutes for price data
 - **Cache invalidation propagation:** Under 1 second
 
@@ -596,6 +861,8 @@ socket.on('price_update', ({ ticker }) => {
 
 1. **Tier your cache:** Different data needs different freshness
 2. **Hydrate immediately:** localStorage gives instant data on load
-3. **Share across components:** Prevent duplicate requests
-4. **Invalidate intelligently:** Update caches when data changes
-5. **Monitor hit rates:** Optimize TTLs based on usage patterns
+3. **Redis for hot data:** Offload frequent reads from your database for sub-ms responses
+4. **Share across components:** Prevent duplicate requests
+5. **Invalidate intelligently:** Update caches when data changes (use SCAN not KEYS)
+6. **Use immutable for hashed assets:** Eliminates conditional requests entirely
+7. **Monitor hit rates:** Optimize TTLs based on usage patterns

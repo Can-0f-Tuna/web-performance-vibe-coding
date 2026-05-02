@@ -316,31 +316,130 @@ function StreamingResponse({ stream }) {
 }
 ```
 
-### Typewriter Effect
+## React Server Components Streaming
+
+### `renderToReadableStream`
 
 ```javascript
-function TypewriterText({ text, speed = 30 }) {
-  const [displayText, setDisplayText] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  
-  useEffect(() => {
-    if (currentIndex < text.length) {
-      const timeout = setTimeout(() => {
-        setDisplayText(text.slice(0, currentIndex + 1));
-        setCurrentIndex(currentIndex + 1);
-      }, speed);
-      
-      return () => clearTimeout(timeout);
+// Server-side: stream React Server Components to the client
+import { renderToReadableStream } from 'react-dom/server';
+
+async function handler(request) {
+  const stream = await renderToReadableStream(
+    <App />,
+    {
+      bootstrapScripts: ['/client.js'],
+      onError(error) {
+        console.error('Stream error:', error);
+      }
     }
-  }, [currentIndex, text, speed]);
+  );
+  
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/html',
+      'Transfer-Encoding': 'chunked',
+      'X-Content-Type-Options': 'nosniff'
+    }
+  });
+}
+```
+
+### Out-of-Order Streaming with `use()`
+
+```javascript
+// React Server Component with streaming data dependencies
+async function StockWidget({ ticker }) {
+  // Fetch data — rendered on server, streamed to client as it resolves
+  const price = await fetchPrice(ticker);
   
   return (
-    <span>
-      {displayText}
-      {currentIndex < text.length && <span className="cursor">▌</span>}
-    </span>
+    <Suspense fallback={<PriceSkeleton />}>
+      <PriceDisplay price={price} />
+    </Suspense>
   );
 }
+
+// Client component receives streamed HTML progressively
+// Users see the shell immediately, content fills in as data arrives
+```
+
+## Node.js `pipe()` for Large Responses
+
+```javascript
+// Stream large datasets without buffering into memory
+import { createReadStream } from 'fs';
+import { Transform } from 'stream';
+
+app.get('/api/export/csv', (req, res) => {
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Transfer-Encoding', 'chunked');
+  
+  // Pipe a large file through a transform, never loading all at once
+  createReadStream('/data/large-dataset.csv')
+    .pipe(new Transform({
+      transform(chunk, encoding, callback) {
+        // Optional: transform each chunk (e.g. filter, map)
+        callback(null, chunk);
+      }
+    }))
+    .pipe(res);
+});
+
+// Streaming JSON array — each item sent as its own chunk
+app.get('/api/stream/records', async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.write('[');
+  
+  let first = true;
+  for await (const record of fetchRecords()) {
+    if (!first) res.write(',');
+    res.write(JSON.stringify(record));
+    first = false;
+  }
+  
+  res.write(']');
+  res.end();
+});
+```
+
+## Server-Sent Events (SSE)
+
+```javascript
+// Server: one-way real-time data pushed to client
+app.get('/api/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  
+  // Send initial connection event
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+  
+  // Push updates as they happen
+  const interval = setInterval(() => {
+    const update = { price: Math.random() * 100, timestamp: Date.now() };
+    res.write(`data: ${JSON.stringify(update)}\n\n`);
+  }, 1000);
+  
+  // Clean up on client disconnect
+  req.on('close', () => clearInterval(interval));
+});
+
+// Client: consume SSE stream
+const eventSource = new EventSource('/api/events');
+
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  updateUI(data);
+};
+
+eventSource.onerror = () => {
+  // EventSource auto-reconnects by default
+  console.warn('SSE connection lost, retrying...');
+};
 ```
 
 ## Optimistic UI with Streaming
@@ -392,11 +491,8 @@ function OptimisticStreamingChat() {
     <div className="chat">
       {messages.map(msg => (
         <div key={msg.id} className={`message ${msg.role}`}>
-          {msg.isStreaming ? (
-            <TypewriterText text={msg.content} />
-          ) : (
-            msg.content
-          )}
+          <div className="message-content">{msg.content}</div>
+          {msg.isStreaming && <span className="streaming-indicator" />}
         </div>
       ))}
       <input 
@@ -413,11 +509,13 @@ function OptimisticStreamingChat() {
 
 - [ ] Implement real token streaming (not chunked simulation)
 - [ ] Add anti-buffering headers to disable proxy buffering
+- [ ] Use `renderToReadableStream` for React Server Component streaming
+- [ ] Use `pipe()` for streaming large responses in Node.js
+- [ ] Implement SSE for one-way real-time data
 - [ ] Use parallel tool calls on backend
 - [ ] Implement batched prompts for efficiency
 - [ ] Batch client-side API calls over single endpoint
 - [ ] Add progress indicators for streaming operations
-- [ ] Implement typewriter effect for AI responses
 - [ ] Use optimistic UI updates with streaming
 - [ ] Handle stream errors gracefully
 - [ ] Test streaming on slow connections
@@ -434,6 +532,9 @@ function OptimisticStreamingChat() {
 
 1. **Real streaming:** Send tokens as they're generated, not in chunks
 2. **Disable buffering:** Use headers to prevent proxy/CDN buffering
-3. **Parallel execution:** Run independent operations simultaneously
-4. **Batch requests:** Combine multiple API calls into one
-5. **Optimistic UI:** Show results immediately while streaming completes
+3. **React streaming:** Use `renderToReadableStream` for progressive page delivery
+4. **SSE:** Use Server-Sent Events for one-way real-time data (simpler than WebSocket)
+5. **Pipe streams:** Use `pipe()` to stream large responses without memory overhead
+6. **Parallel execution:** Run independent operations simultaneously
+7. **Batch requests:** Combine multiple API calls into one
+8. **Optimistic UI:** Show results immediately while streaming completes

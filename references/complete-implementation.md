@@ -36,7 +36,7 @@ bunx vite-bundle-visualizer
 4. Replace any heavy libraries with lightweight alternatives
 5. Add build minification and tree-shaking
 
-Target: 114 KB main bundle.
+Target: Under 150 KB main bundle (114 KB aspirational ceiling).
 
 **AI Output:**
 - Dynamic imports for routes
@@ -206,7 +206,7 @@ Target: CLS under 0.1, 60fps scrolling.
 Bundle Size: 114 KB ✓
 FCP: 450ms ✓
 LCP: 1.2s ✓
-TTI: 1.8s ✓
+TTI: Under 3.8s ✓
 CLS: 0.03 ✓
 Cache Hit Rate: 85% ✓
 WS Reconnect: 400ms ✓
@@ -284,7 +284,7 @@ bunx lighthouse-ci
 
 1. **Systematic approach:** All 7 strategies compound
 2. **Minimal setup:** Terminal only, no complex tooling
-3. **AI leverage:** Focus on architecture, trust implementation
+3. **AI leverage:** Focus on architecture, verify every optimization with measurements
 4. **Measure obsessively:** Verify every optimization
 5. **Weekend possible:** 16 hours of focused work
 

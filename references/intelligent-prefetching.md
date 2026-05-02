@@ -6,6 +6,26 @@ Make navigation feel instantaneous by loading data before the user requests it.
 
 **Anticipate user behavior.** Turn reactive loading into proactive performance by prefetching based on intent detection.
 
+## Resource Hint Decision Guide
+
+Choose the right `<link>` hint for each use case:
+
+| Hint | When to Use | Example |
+|------|-------------|---------|
+| `<link rel="preload">` | Resources needed for the **current** page, discovered late by the browser (fonts, LCP image, critical CSS/JS above the fold) | `<link rel="preload" href="/fonts/inter.woff2" as="font" crossorigin>` |
+| `<link rel="prefetch">` | Resources needed for a **future** navigation (next route's JS bundle, next page's API data). Low priority, downloaded during idle time | `<link rel="prefetch" href="/pages/dashboard.js">` |
+| `<link rel="preconnect">` | **Cross-origin** resources where you'll definitely connect (CDN, API server, font provider). Opens TCP+TLS handshake early | `<link rel="preconnect" href="https://fonts.googleapis.com">` |
+| `<link rel="dns-prefetch">` | When you need DNS resolution but **aren't sure** you'll connect. Lighter than preconnect — DNS only, no TCP/TLS | `<link rel="dns-prefetch" href="https://analytics.example.com">` |
+| `<link rel="modulepreload">` | ES module scripts needed for the current page, ensuring they're fetched and compiled early | `<link rel="modulepreload" href="/chunks/vendor.js">` |
+| `<link rel="prerender">` | Load and render an **entire page** in a hidden tab for instant navigation (high cost — use sparingly) | `<link rel="prerender" href="/checkout">` |
+
+**Decision flow:**
+- On current page? → `preload`
+- For next navigation? → `prefetch` (route code) or `prefetch` + cache (API data)
+- Cross-origin & definitely needed? → `preconnect`
+- Cross-origin & unsure? → `dns-prefetch`
+- ES module on current page? → `modulepreload`
+
 ## Intent Detection Strategies
 
 ### 1. Login Intent Detection
@@ -16,22 +36,25 @@ Prefetch critical routes and APIs before session resolves.
 // Prefetch on login form interaction
 function LoginForm() {
   const [email, setEmail] = useState('');
-  
-  // Prefetch when user starts typing (login intent)
+
+  // Debounced prefetch: only fires after 300ms of no typing AND email > 3 chars
   useEffect(() => {
-    if (email.length > 3) {
-      // Preload critical APIs
+    if (email.length <= 3) return;
+
+    const timer = setTimeout(() => {
       preloadApi('/api/user/profile');
       preloadApi('/api/dashboard/data');
       preloadRoute('/dashboard');
-    }
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [email]);
-  
+
   return (
     <form onSubmit={handleSubmit}>
-      <input 
-        type="email" 
-        value={email} 
+      <input
+        type="email"
+        value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="Enter email"
       />
@@ -39,9 +62,16 @@ function LoginForm() {
     </form>
   );
 }
+```
 
-// Preload helpers
+### Prefetch Helpers (Deduplicated)
+
+```javascript
+const prefetchedUrls = new Set();
+
 const preloadApi = (url) => {
+  if (prefetchedUrls.has(url)) return;
+  prefetchedUrls.add(url);
   const link = document.createElement('link');
   link.rel = 'prefetch';
   link.href = url;
@@ -66,7 +96,7 @@ function App() {
     wsLink.rel = 'preconnect';
     wsLink.href = 'wss://api.yourapp.com';
     document.head.appendChild(wsLink);
-    
+
     // Preload essential APIs in parallel
     const essentialApis = [
       '/api/user/profile',
@@ -77,7 +107,7 @@ function App() {
       '/api/notifications/unread',
       '/api/settings/ui'
     ];
-    
+
     // Use requestIdleCallback for non-critical preloading
     if ('requestIdleCallback' in window) {
       requestIdleCallback(() => {
@@ -89,7 +119,7 @@ function App() {
       }, 1000);
     }
   }, []);
-  
+
   return <Router />;
 }
 ```
@@ -101,27 +131,26 @@ Implement hover prefetching for tickers, chat, navigation elements.
 ```javascript
 // HoverPrefetchLink.jsx
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
 function HoverPrefetchLink({ to, apiUrl, children, ...props }) {
-  const [isHovered, setIsHovered] = useState(false);
-  
+  const queryClient = useQueryClient();
+
   const handleMouseEnter = () => {
-    setIsHovered(true);
-    
     // Prefetch route component
     prefetchRoute(to);
-    
+
     // Prefetch API data
     if (apiUrl) {
       prefetchApi(apiUrl);
     }
   };
-  
+
   const prefetchRoute = (route) => {
     // Dynamic import the route component
     const routeModule = import(`../pages${route}.jsx`);
   };
-  
+
   const prefetchApi = async (url) => {
     // Use fetch with cache to warm the cache
     try {
@@ -136,14 +165,13 @@ function HoverPrefetchLink({ to, apiUrl, children, ...props }) {
       // Silently fail - prefetch shouldn't break the app
     }
   };
-  
+
   return (
-    <Link 
-      to={to} 
+    <Link
+      to={to}
       onMouseEnter={handleMouseEnter}
       onTouchStart={handleMouseEnter}
-      onMouseLeave={() => setIsHovered(false)}
-      style={isHovered ? { cursor: 'pointer' } : {}}
+      style={{ cursor: 'pointer' }}
       {...props}
     >
       {children}
@@ -152,8 +180,8 @@ function HoverPrefetchLink({ to, apiUrl, children, ...props }) {
 }
 
 // Usage
-<HoverPrefetchLink 
-  to="/stock/AAPL" 
+<HoverPrefetchLink
+  to="/stock/AAPL"
   apiUrl="/api/stock/AAPL/quote"
 >
   Apple Inc.
@@ -167,26 +195,26 @@ function HoverPrefetchLink({ to, apiUrl, children, ...props }) {
 function TouchPrefetchWrapper({ to, apiUrl, children }) {
   const touchStartTime = useRef(null);
   const touchTimeout = useRef(null);
-  
+
   const handleTouchStart = () => {
     touchStartTime.current = Date.now();
-    
+
     // Prefetch after 100ms touch (intent confirmed)
     touchTimeout.current = setTimeout(() => {
       prefetchRoute(to);
       if (apiUrl) prefetchApi(apiUrl);
     }, 100);
   };
-  
+
   const handleTouchEnd = () => {
     // Cancel prefetch if touch was quick (less than 100ms - likely scroll)
     if (Date.now() - touchStartTime.current < 100) {
       clearTimeout(touchTimeout.current);
     }
   };
-  
+
   return (
-    <div 
+    <div
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onClick={() => navigate(to)}
@@ -242,9 +270,9 @@ function StockPage({ ticker }) {
       };
     }
   });
-  
+
   if (isLoading) return <SkeletonLoader />;
-  
+
   return (
     <div className="stock-page">
       <StockQuote data={stockData.quote} />
@@ -272,28 +300,28 @@ const PREFETCH_PRIORITY = {
 function usePriorityPrefetch() {
   const prefetchQueue = useRef([]);
   const isProcessing = useRef(false);
-  
+
   const addToQueue = (url, priority = PREFETCH_PRIORITY.MEDIUM) => {
     prefetchQueue.current.push({ url, priority, timestamp: Date.now() });
     prefetchQueue.current.sort((a, b) => a.priority - b.priority);
-    
+
     if (!isProcessing.current) {
       processQueue();
     }
   };
-  
+
   const processQueue = async () => {
     if (prefetchQueue.current.length === 0) {
       isProcessing.current = false;
       return;
     }
-    
+
     isProcessing.current = true;
     const item = prefetchQueue.current.shift();
-    
+
     // Use requestIdleCallback for non-critical items
     const idleCallback = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
-    
+
     idleCallback(async () => {
       try {
         await fetch(item.url, { priority: 'low' });
@@ -303,28 +331,28 @@ function usePriorityPrefetch() {
       processQueue();
     });
   };
-  
+
   return { addToQueue };
 }
 
 // Usage
 function Dashboard() {
   const { addToQueue } = usePriorityPrefetch();
-  
+
   useEffect(() => {
     // Critical: Load immediately
     addToQueue('/api/dashboard/data', PREFETCH_PRIORITY.CRITICAL);
-    
+
     // High: Related data
     addToQueue('/api/portfolio/summary', PREFETCH_PRIORITY.HIGH);
-    
+
     // Medium: Likely next pages
     addToQueue('/api/watchlist/data', PREFETCH_PRIORITY.MEDIUM);
-    
+
     // Low: Background analytics
     addToQueue('/api/analytics/views', PREFETCH_PRIORITY.LOW);
   }, []);
-  
+
   return <DashboardContent />;
 }
 ```
@@ -333,33 +361,41 @@ function Dashboard() {
 
 ### Connection-Aware Prefetching
 
+`navigator.connection` is a Chrome-only enhancement. Always include a fallback so prefetching works across all browsers.
+
 ```javascript
 function useSmartPrefetch() {
   const canPrefetch = () => {
-    // Check connection type
-    const connection = navigator.connection;
-    
-    if (!connection) return true; // Assume yes if API not available
-    
-    // Don't prefetch on 2G or data saver mode
-    if (connection.saveData) return false;
-    if (connection.effectiveType === '2g') return false;
-    if (connection.effectiveType === 'slow-2g') return false;
-    
-    // Limit on 3G
-    if (connection.effectiveType === '3g') {
-      return connection.downlink > 1.0; // At least 1 Mbps
+    try {
+      const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+
+      // No Network Information API? Default to prefetching — all browsers support basic fetch.
+      if (!connection) return true;
+
+      // Honor data saver mode
+      if (connection.saveData) return false;
+
+      // Skip on slowest connections
+      if (connection.effectiveType === 'slow-2g' || connection.effectiveType === '2g') return false;
+
+      // Limit on 3G
+      if (connection.effectiveType === '3g') {
+        return connection.downlink > 1.0;
+      }
+
+      return true;
+    } catch {
+      // If anything throws (older browser), default to prefetching
+      return true;
     }
-    
-    return true;
   };
-  
+
   const prefetch = (url) => {
     if (!canPrefetch()) return;
-    
+
     fetch(url, { priority: 'low' }).catch(() => {});
   };
-  
+
   return { prefetch, canPrefetch };
 }
 ```
@@ -369,7 +405,7 @@ function useSmartPrefetch() {
 ```javascript
 function useVisibilityPrefetch() {
   const prefetchQueue = useRef([]);
-  
+
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -380,11 +416,11 @@ function useVisibilityPrefetch() {
         }
       }
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
-  
+
   const queuePrefetch = (url) => {
     if (document.visibilityState === 'hidden') {
       prefetchQueue.current.push(url);
@@ -392,7 +428,7 @@ function useVisibilityPrefetch() {
       fetch(url).catch(() => {});
     }
   };
-  
+
   return { queuePrefetch };
 }
 ```
@@ -427,16 +463,16 @@ function ChatTrigger({ chatId }) {
   const handleMouseEnter = () => {
     // Prefetch chat messages
     prefetchApi(`/api/chat/${chatId}/messages`);
-    
+
     // Prefetch chat participants
     prefetchApi(`/api/chat/${chatId}/participants`);
-    
+
     // Preload chat component
     import('../components/ChatWindow.jsx');
   };
-  
+
   return (
-    <button 
+    <button
       onMouseEnter={handleMouseEnter}
       onClick={() => openChat(chatId)}
     >
@@ -454,14 +490,14 @@ function AgentCard({ agentId }) {
   const handleHover = () => {
     // Prefetch agent details
     prefetchApi(`/api/agents/${agentId}`);
-    
+
     // Prefetch agent's recent activity
     prefetchApi(`/api/agents/${agentId}/activity`);
-    
+
     // Preload agent detail page
     import('../pages/AgentDetailPage.jsx');
   };
-  
+
   return (
     <div onMouseEnter={handleHover} className="agent-card">
       <AgentPreview agentId={agentId} />
@@ -472,14 +508,15 @@ function AgentCard({ agentId }) {
 
 ## Checklist
 
-- [ ] Implement login intent detection and preloading
+- [ ] Implement login intent detection with debounced preloading
+- [ ] Deduplicate prefetch URLs to prevent DOM leaks
 - [ ] Preload 7+ essential APIs on page mount
 - [ ] Add WebSocket preconnect
 - [ ] Implement hover-based prefetching for navigation
 - [ ] Add touch-based prefetching for mobile
 - [ ] Use parallel data fetching for stock pages
 - [ ] Implement priority-based prefetching queue
-- [ ] Add connection-aware prefetching
+- [ ] Add connection-aware prefetching with cross-browser fallback
 - [ ] Add visibility-aware prefetching
 - [ ] Track prefetch hit rates and effectiveness
 
@@ -497,3 +534,6 @@ function AgentCard({ agentId }) {
 3. **Smart conditions:** Respect connection speed and data saver modes
 4. **Priority queue:** Load critical data first, background data last
 5. **Measure effectiveness:** Track prefetch hit rates to optimize
+6. **Choose the right hint:** preload for current page, prefetch for next, preconnect for cross-origin
+7. **Debounce typing:** Never prefetch on every keystroke — wait for pauses
+8. **Deduplicate:** Track prefetched URLs to avoid leaking DOM nodes
