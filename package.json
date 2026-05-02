@@ -1,0 +1,46 @@
+{
+  "name": "web-performance-vibe-coding",
+  "version": "1.0.0",
+  "description": "Extreme web performance optimization skill using vibe coding - 7 strategies for building the fastest web apps",
+  "main": "index.js",
+  "files": [
+    "SKILL.md",
+    "README.md",
+    "references/",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "skill",
+    "performance",
+    "optimization",
+    "react",
+    "bun",
+    "vibe-coding",
+    "ai-assisted",
+    "claude",
+    "web-performance",
+    "caching",
+    "prefetching",
+    "bundle-size",
+    "streaming",
+    "websocket",
+    "service-worker",
+    "pwa"
+  ],
+  "author": "Can-0f-Tuna",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Can-0f-Tuna/web-performance-vibe-coding.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Can-0f-Tuna/web-performance-vibe-coding/issues"
+  },
+  "homepage": "https://github.com/Can-0f-Tuna/web-performance-vibe-coding#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
